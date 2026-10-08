@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FH Developments - Admin</title>
+<style>
+:root{--blue:#1f5fbf;--dark:#174a95;--line:#9fb3cf;--bg:#f0f0f0;--text:#1a1a1a}
+*{box-sizing:border-box}
+body{margin:0;font:13px "Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--text)}
+header{display:flex;align-items:center;gap:12px;background:#fff;border-bottom:3px solid var(--blue);padding:8px 16px}
+header img{height:38px}
+header h1{font-size:18px;margin:0;color:var(--blue);flex:1}
+header span{color:#444}
+button{font:inherit;padding:4px 12px;background:#e1e1e1;border:1px solid #888;border-radius:2px;cursor:pointer}
+button:hover{background:#d4e3f8;border-color:var(--blue)}
+button.primary{background:var(--blue);color:#fff;border-color:var(--dark)}
+button.primary:hover{background:var(--dark)}
+nav{display:flex;gap:2px;padding:10px 16px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+nav button{border-radius:3px 3px 0 0;border-bottom:none;background:#dcdcdc;padding:6px 16px;margin-bottom:-1px}
+nav button.on{background:#fff;color:var(--blue);font-weight:600;border-color:var(--line)}
+main{padding:16px;background:#fff;margin:0 16px 16px;border:1px solid var(--line);border-top:none;min-height:60vh}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+fieldset{border:1px solid var(--line);margin:0;padding:8px 12px 12px;background:var(--bg)}
+legend{color:var(--blue);font-weight:600;padding:0 4px}
+.big{font-size:28px;font-weight:600;text-align:center;color:var(--dark)}
+.bar{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+.bar h2{margin:0;font-size:16px;color:var(--blue);flex:1}
+.bar input{padding:3px 6px;border:1px solid #888;width:200px}
+.wrap{overflow:auto;max-height:68vh;border:1px solid var(--line)}
+table{border-collapse:collapse;width:max-content;min-width:100%}
+th{position:sticky;top:0;background:var(--blue);color:#fff;text-align:left;padding:5px 8px;white-space:nowrap;font-weight:600}
+td{border:1px solid #d6d6d6;padding:0}
+tr:nth-child(even) td{background:#f6f9fd}
+td input,td select{width:100%;min-width:110px;border:none;background:transparent;padding:5px 8px;font:inherit}
+td input:focus,td select:focus{outline:2px solid var(--blue);background:#fff}
+td.ro{padding:5px 8px;white-space:nowrap;background:#eef2f8!important;color:#333}
+td.x{padding:2px 4px}
+.login{max-width:380px;margin:12vh auto;text-align:center;background:#fff;border:1px solid var(--line);padding:30px}
+.login img{max-width:240px}
+.err{color:#b00020;margin:12px 0}
+.status{font-size:12px;color:#555;min-width:60px}
+.hint{color:#555;margin-top:8px;font-size:12px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const LOGO='https://cdn.fh-development.xyz/core/banners/Blue-Logo.jpg';
+const YN=['Yes','No'], SS=['Active','Pending','Suspended','Terminated'];
+const $=(t,p={},...k)=>{const e=document.createElement(t);Object.assign(e,p);k.flat().forEach(x=>e.append(x));return e};
+const money=n=>'£'+(+n||0).toFixed(2);
+// col: [name,type,options]  types: id, t(text), n(number), d(date), s(select), plan, calc
+const SCHEMA={
+ customers:{label:'Customers',pre:'C',cols:[['Customer ID','id'],['FH ID','t'],['Name','t'],['Email','t'],['Account Status','s',['Active','Pending','Suspended','Closed']],['Arlo Server ID','t'],['Service Plan','plan'],['Server Status','s',SS],['Created On','d'],['Renewal Date','d'],['FH ToS Accepted?','s',YN],['Arlo ToS Accepted?','s',YN],['Notes','t']]},
+ orders:{label:'Orders',pre:'O',cols:[['Order ID','id'],['Date','d'],['FH ID','t'],['Name','t'],['Product','plan'],['Billing Period','s',['Monthly']],['Arlo Pricing','n'],['FH Pricing','n'],['FH Margin','calc'],['Payment Status','s',['Awaiting Payment','Paid','Failed','Refunded']],['Payment Date','d'],['Payment Reference','t'],['Server ID','t'],['Renewal Date','d'],['Cancellation Date','d'],['Notes','t']]},
+ payments:{label:'Payments',pre:'P',cols:[['Date','d'],['FH Order ID','t'],['Amount (GBP)','n'],['Method','s',['Bank Transfer','PayPal','Card','Other']],['Reference','t'],['Status','s',['Pending','Confirmed','Failed','Refunded']],['Confirmed By','t'],['Confirmed Date','d'],['Notes','t']]},
+ servers:{label:'Servers',pre:'S',cols:[['Arlo Server ID','t'],['FH ID','t'],['Name','t'],['FH Order ID','t'],['Plan','plan'],['Node','t'],['Server ID/Hostname','t'],['Created','d'],['Renewal','d'],['Status','s',SS],['Suspended Reason','t'],['Termination Date','d'],['Termination Reason','t'],['Notes','t']]},
+ moderation:{label:'Moderation',pre:'M',cols:[['Case ID','id'],['Date','d'],['FH ID','t'],['Customer Name','t'],['Arlo Server ID','t'],['Issue','t'],['Reported By','t'],['Severity','s',['Low','Medium','High','Critical']],['Action Taken','t'],['Action Date','d'],['User Notified?','s',YN],['Resolution','t'],['Resolution Date','d'],['Notes','t']]},
+ pricing:{label:'Pricing',pre:'',cols:[['Plan','t'],['Billing Period','s',['Monthly']],['Arlo Price','n'],['FH Price','n'],['Recommended Markup %','n'],['Active','s',YN],['Notes','t']]}
+};
+const DEFAULT_PRICING=[['Starter',1,1.2],['Standard',2,2.35],['Premium',3.5,4.05]].map(([Plan,a,f])=>({Plan,'Billing Period':'Monthly','Arlo Price':a,'FH Price':f,'Recommended Markup %':15,Active:'Yes',Notes:''}));
+let DATA={},TAB='dashboard',timers={};
+
+async function api(path,opt){const r=await fetch(path,opt);if(r.status===401)throw 401;return r.json()}
+function save(key){
+  const st=document.getElementById('st');if(st)st.textContent='Saving...';
+  clearTimeout(timers[key]);
+  timers[key]=setTimeout(async()=>{
+    try{await api('/api/data',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,rows:DATA[key]})});
+      if(st)st.textContent='Saved'}catch(e){if(st)st.textContent='Save failed!'}
+  },500);
+}
+const plans=()=>DATA.pricing.filter(p=>p.Active!=='No').map(p=>p.Plan);
+const margin=r=>(+r['FH Pricing']||0)-(+r['Arlo Pricing']||0);
+
+function login(err){
+  const msg={denied:'Access denied. Your Discord account does not have the required role.',auth:'Sign-in failed. Please try again.'}[err];
+  document.getElementById('app').replaceChildren($('div',{className:'login'},
+    $('img',{src:LOGO,alt:'FH Developments'}),$('h2',{textContent:'FH Developments Admin',style:'color:#1f5fbf'}),
+    msg?$('div',{className:'err',textContent:msg}):'',
+    $('p',{textContent:'Staff only. Sign in with Discord to continue.'}),
+    $('button',{className:'primary',textContent:'Sign in with Discord',onclick:()=>location.href='/api/auth/login'})));
+}
+
+function shell(user){
+  const app=document.getElementById('app');
+  const nav=$('nav');
+  [['dashboard','Dashboard'],...Object.entries(SCHEMA).map(([k,v])=>[k,v.label])].forEach(([k,l])=>
+    nav.append($('button',{textContent:l,className:k===TAB?'on':'',onclick:()=>{TAB=k;shell(user)}})));
+  const main=$('main');
+  app.replaceChildren(
+    $('header',{},$('img',{src:LOGO,alt:''}),$('h1',{textContent:'FH Developments'}),$('span',{id:'st',className:'status'}),
+      $('span',{textContent:user.name}),$('button',{textContent:'Log out',onclick:()=>location.href='/api/logout'})),
+    nav,main);
+  TAB==='dashboard'?dashboard(main):table(main,TAB);
+}
+
+function dashboard(m){
+  const sv=DATA.servers,od=DATA.orders;
+  const cnt=s=>sv.filter(x=>x.Status===s).length;
+  const earn=od.filter(o=>o['Payment Status']==='Paid').reduce((a,o)=>a+margin(o),0);
+  const cards=[['Total Customers',DATA.customers.length],['Active Servers',cnt('Active')],['Total Orders',od.length],
+    ['Awaiting Payment',od.filter(o=>o['Payment Status']==='Awaiting Payment').length],['Suspended Servers',cnt('Suspended')],
+    ['Terminated Servers',cnt('Terminated')],['Earnings',money(earn)]];
+  m.append($('div',{className:'bar'},$('h2',{textContent:'Dashboard'})),
+    $('div',{className:'grid'},cards.map(([l,v])=>$('fieldset',{},$('legend',{textContent:l}),$('div',{className:'big',textContent:v})))),
+    $('p',{className:'hint',textContent:'Earnings = total FH margin (FH price minus Arlo price) on orders marked Paid. Server counts come from the Servers page.'}));
+}
+
+function table(m,key){
+  const sc=SCHEMA[key],rows=DATA[key];let q='';
+  const wrap=$('div',{className:'wrap'});
+  const draw=()=>{
+    const t=$('table'),h=$('tr');
+    sc.cols.forEach(c=>h.append($('th',{textContent:c[0]})));h.append($('th'));t.append($('thead',{},h));
+    const tb=$('tbody');
+    rows.forEach((r,i)=>{
+      if(q&&!JSON.stringify(Object.values(r)).toLowerCase().includes(q))return;
+      const tr=$('tr');
+      sc.cols.forEach(([n,type,opt])=>{
+        const td=$('td');
+        if(type==='id'||type==='calc'){td.className='ro';td.textContent=type==='calc'?money(margin(r)):r[n]}
+        else{
+          let el;
+          if(type==='s'||type==='plan'){
+            const o=type==='plan'?['',...plans()]:opt;
+            el=$('select');(o.includes(r[n]||'')||!r[n]?o:[...o,r[n]]).forEach(v=>el.append($('option',{value:v,textContent:v})));
+            el.value=r[n]||(type==='s'?o[0]:'');if(type==='s'&&!r[n])r[n]=o[0];
+          }else el=$('input',{type:{n:'number',d:'date'}[type]||'text',step:'0.01',value:r[n]??''});
+          el.onchange=()=>{r[n]=type==='n'?(el.value===''?'':+el.value):el.value;
+            if(key==='orders'&&(n==='Product'||n==='Billing Period')){
+              const p=DATA.pricing.find(p=>p.Plan===r.Product&&p['Billing Period']===r['Billing Period']);
+              if(p){r['Arlo Pricing']=p['Arlo Price'];r['FH Pricing']=p['FH Price']}}
+            save(key);if(key==='orders'||key==='pricing')draw()};
+          td.append(el);
+        }
+        tr.append(td);
+      });
+      tr.append($('td',{className:'x'},$('button',{textContent:'Delete',onclick:()=>{if(confirm('Delete this row?')){rows.splice(i,1);save(key);draw()}}})));
+      tb.append(tr);
+    });
+    t.append(tb);wrap.replaceChildren(t);
+  };
+  const add=()=>{
+    const r={};sc.cols.forEach(([n,type,opt])=>{r[n]=type==='s'?opt[0]:''});
+    const idc=sc.cols.find(c=>c[1]==='id');
+    if(idc)r[idc[0]]=sc.pre+'-'+String(Math.max(0,...rows.map(x=>+String(x[idc[0]]).split('-')[1]||0))+1).padStart(4,'0');
+    if(key==='orders'||key==='customers'||key==='payments')r[key==='customers'?'Created On':'Date']=new Date().toISOString().slice(0,10);
+    rows.push(r);save(key);draw();wrap.scrollTop=wrap.scrollHeight;
+  };
+  m.append($('div',{className:'bar'},$('h2',{textContent:sc.label}),
+    $('input',{placeholder:'Search...',oninput:e=>{q=e.target.value.toLowerCase();draw()}}),
+    $('button',{className:'primary',textContent:'Add row',onclick:add})),wrap);
+  if(key==='pricing')m.append($('p',{className:'hint',textContent:'Prices here fill in new orders automatically. Set a plan to Active = No to hide it from the plan dropdowns.'}));
+  draw();
+}
+
+(async()=>{
+  const err=new URLSearchParams(location.search).get('error');
+  try{
+    const user=await api('/api/me');
+    const d=await api('/api/data');
+    for(const k of Object.keys(SCHEMA))DATA[k]=d[k]||(k==='pricing'?DEFAULT_PRICING:[]);
+    if(!d.pricing)save('pricing');
+    shell(user);
+  }catch(e){login(err)}
+})();
+</script>
+</body>
+</html>
