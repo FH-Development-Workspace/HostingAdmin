@@ -62,7 +62,10 @@ const SCHEMA={
 const DEFAULT_PRICING=[['Starter',1,1.2],['Standard',2,2.35],['Premium',3.5,4.05]].map(([Plan,a,f])=>({Plan,'Billing Period':'Monthly','Arlo Price':a,'FH Price':f,'Recommended Markup %':15,Active:'Yes',Notes:''}));
 let DATA={},TAB='dashboard',timers={};
 
-async function api(path,opt){const r=await fetch(path,opt);if(r.status===401)throw 401;return r.json()}
+async function api(path,opt){
+  const r=await fetch(path,opt);if(r.status===401)throw 401;
+  let j;try{j=await r.json()}catch{throw new Error('Server error ('+r.status+') on '+path)}
+  if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}
 function save(key){
   const st=document.getElementById('st');if(st)st.textContent='Saving...';
   clearTimeout(timers[key]);
@@ -75,10 +78,11 @@ const plans=()=>DATA.pricing.filter(p=>p.Active!=='No').map(p=>p.Plan);
 const margin=r=>(+r['FH Pricing']||0)-(+r['Arlo Pricing']||0);
 
 function login(err){
-  const msg={denied:'Access denied. Your Discord account does not have the required role.',auth:'Sign-in failed. Please try again.'}[err];
+  const why=new URLSearchParams(location.search).get('why');
+  const msg={denied:'Access denied. Your Discord account does not have the required role.',notmember:'Access denied. Your Discord account is not in the FH server.',config:'Server setup incomplete.',auth:'Sign-in failed. Please try again.'}[err];
   document.getElementById('app').replaceChildren($('div',{className:'login'},
     $('img',{src:LOGO,alt:'FH Developments'}),$('h2',{textContent:'FH Developments Admin',style:'color:#1f5fbf'}),
-    msg?$('div',{className:'err',textContent:msg}):'',
+    msg?$('div',{className:'err',textContent:msg+(why?' ('+why+')':'')}):'',
     $('p',{textContent:'Staff only. Sign in with Discord to continue.'}),
     $('button',{className:'primary',textContent:'Sign in with Discord',onclick:()=>location.href='/api/auth/login'})));
 }
@@ -158,13 +162,21 @@ function table(m,key){
 
 (async()=>{
   const err=new URLSearchParams(location.search).get('error');
+  let user;
+  try{user=await api('/api/me')}catch(e){return login(err)}
   try{
-    const user=await api('/api/me');
     const d=await api('/api/data');
     for(const k of Object.keys(SCHEMA))DATA[k]=d[k]||(k==='pricing'?DEFAULT_PRICING:[]);
     if(!d.pricing)save('pricing');
     shell(user);
-  }catch(e){login(err)}
+  }catch(e){
+    document.getElementById('app').replaceChildren($('div',{className:'login'},
+      $('img',{src:LOGO,alt:'FH Developments'}),
+      $('p',{textContent:'Signed in as '+user.name+', but the data could not be loaded.'}),
+      $('div',{className:'err',textContent:e.message||String(e)}),
+      $('button',{textContent:'Retry',onclick:()=>location.reload()}),' ',
+      $('button',{textContent:'Log out',onclick:()=>location.href='/api/logout'})));
+  }
 })();
 </script>
 </body>
